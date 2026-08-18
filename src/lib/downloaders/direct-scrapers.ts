@@ -21,7 +21,7 @@ async function downloadFileFromUrl(url: string, destPath: string, referer?: stri
     responseType: 'stream',
     headers: {
       ...DEFAULT_HEADERS,
-      Referer: referer || 'https://www.threads.net/',
+      Referer: referer || 'https://www.threads.com/',
     },
     timeout: 60000,
   });
