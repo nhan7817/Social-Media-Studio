@@ -4,20 +4,41 @@ import os from 'os';
 import fs from 'fs';
 
 export async function GET() {
-  const defaultDir = path.join(os.homedir(), 'Downloads', 'SocialMediaDownloader');
-  
-  // Also provide common local drive shortcuts
+  // Safe project-relative default storage for server / domain environments
+  const projectStorage = path.join(process.cwd(), 'storage', 'downloads');
+  const userDownloads = path.join(os.homedir(), 'Downloads', 'SocialMedia');
+
+  // If local user Downloads directory is accessible, suggest it, otherwise default to project storage
+  let defaultDir = projectStorage;
+  try {
+    if (fs.existsSync(path.join(os.homedir(), 'Downloads'))) {
+      defaultDir = userDownloads;
+    }
+  } catch {}
+
+  // Ensure default storage exists
+  try {
+    if (!fs.existsSync(defaultDir)) {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    }
+  } catch {
+    defaultDir = projectStorage;
+    if (!fs.existsSync(defaultDir)) {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    }
+  }
+
   const suggestions = [
     defaultDir,
-    path.join('N:', 'Tools', 'downloads'),
-    path.join(os.homedir(), 'Videos'),
-    path.join(os.homedir(), 'Pictures'),
-  ];
+    projectStorage,
+    path.join(os.tmpdir(), 'social_downloads'),
+  ].filter((v, i, a) => a.indexOf(v) === i);
 
   return NextResponse.json({
     defaultPath: defaultDir,
     suggestions,
     exists: fs.existsSync(defaultDir),
+    isServerEnvironment: process.env.NODE_ENV === 'production' || !process.platform.startsWith('win'),
   });
 }
 

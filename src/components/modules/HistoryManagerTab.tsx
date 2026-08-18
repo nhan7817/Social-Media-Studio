@@ -18,6 +18,9 @@ import {
   ReloadOutlined,
   CopyOutlined,
   SearchOutlined,
+  DownloadOutlined,
+  CloudDownloadOutlined,
+  CheckOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -45,6 +48,7 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -81,7 +85,36 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
     try {
       await axios.post('/api/open-folder', { folderPath: outputFolder });
     } catch {
-      message.error('Không thể mở thư mục trên hệ thống.');
+      message.info('Đang chạy trên môi trường Web Online: Bạn hãy bấm nút "Tải về máy" bên cạnh từng tệp để lưu về máy tính/điện thoại.');
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (files.length === 0 || downloadingAll) return;
+    setDownloadingAll(true);
+    message.loading({ content: `Đang chuẩn bị tải ${files.length} tệp về thiết bị...`, key: 'dl_all_msg' });
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const downloadUrl = `/api/storage/download?path=${encodeURIComponent(file.path)}`;
+        
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        if (i < files.length - 1) {
+          await new Promise((res) => setTimeout(res, 350));
+        }
+      }
+      message.success({ content: `Đã gửi lệnh tải ${files.length} tệp về máy tính/điện thoại của bạn!`, key: 'dl_all_msg' });
+    } catch {
+      message.error({ content: 'Có lỗi xảy ra khi tải toàn bộ tệp.', key: 'dl_all_msg' });
+    } finally {
+      setDownloadingAll(false);
     }
   };
 
@@ -123,7 +156,7 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
       title: 'Loại',
       dataIndex: 'type',
       key: 'type',
-      width: 110,
+      width: 100,
       render: (type: string, record: StorageFile) => (
         <Tag
           color={type === 'video' ? 'indigo' : type === 'image' ? 'magenta' : type === 'audio' ? 'purple' : 'default'}
@@ -137,7 +170,7 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
       title: 'Kích Thước',
       dataIndex: 'sizeBytes',
       key: 'sizeBytes',
-      width: 120,
+      width: 110,
       render: (bytes: number) => (
         <span className="font-mono text-xs text-slate-400">{formatBytes(bytes)}</span>
       ),
@@ -146,7 +179,7 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
       title: 'Thời Gian Tạo',
       dataIndex: 'mtime',
       key: 'mtime',
-      width: 180,
+      width: 170,
       render: (mtime: string) => (
         <span className="text-xs text-slate-500 font-mono">
           {new Date(mtime).toLocaleString('vi-VN')}
@@ -154,51 +187,56 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
       ),
     },
     {
-      title: 'Thao Tác',
+      title: 'Thao Tác Tải Về & Quản Lý',
       key: 'actions',
-      width: 140,
-      render: (_: any, record: StorageFile) => (
-        <Space size="small">
-          <Tooltip title="Sao chép đường dẫn">
-            <Button
-              type="text"
-              size="small"
-              icon={<CopyOutlined />}
-              onClick={() => handleCopyPath(record.path)}
-              className="!text-slate-400 hover:!text-indigo-400"
-            />
-          </Tooltip>
+      width: 200,
+      render: (_: any, record: StorageFile) => {
+        const downloadUrl = `/api/storage/download?path=${encodeURIComponent(record.path)}`;
+        return (
+          <Space size="small">
+            {/* Direct Browser Download Button */}
+            <Tooltip title="Tải tệp này về máy tính / điện thoại">
+              <a
+                href={downloadUrl}
+                download={record.name}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition-all"
+              >
+                <DownloadOutlined />
+                <span>Tải về máy</span>
+              </a>
+            </Tooltip>
 
-          <Tooltip title="Mở thư mục chứa file">
-            <Button
-              type="text"
-              size="small"
-              icon={<FolderOpenOutlined />}
-              onClick={handleOpenFolder}
-              className="!text-slate-400 hover:!text-amber-400"
-            />
-          </Tooltip>
-
-          <Popconfirm
-            title="Xóa tệp này?"
-            description="Tệp sẽ bị xóa vĩnh viễn khỏi ổ cứng của bạn."
-            okText="Xóa"
-            cancelText="Hủy"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => handleDelete(record.path)}
-          >
-            <Tooltip title="Xóa tệp">
+            <Tooltip title="Sao chép đường dẫn">
               <Button
                 type="text"
                 size="small"
-                danger
-                icon={<DeleteOutlined />}
-                className="!text-slate-500 hover:!text-rose-400"
+                icon={<CopyOutlined />}
+                onClick={() => handleCopyPath(record.path)}
+                className="!text-slate-400 hover:!text-indigo-400"
               />
             </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+
+            <Popconfirm
+              title="Xóa tệp này?"
+              description="Tệp sẽ bị xóa vĩnh viễn khỏi hệ thống lưu trữ."
+              okText="Xóa"
+              cancelText="Hủy"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDelete(record.path)}
+            >
+              <Tooltip title="Xóa tệp">
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  className="!text-slate-500 hover:!text-rose-400"
+                />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -208,15 +246,27 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
       <div className="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <span>📁 Quản Lý Tệp Tải Về & Lịch Sử Tác Vụ</span>
+            <span>📁 Quản Lý Tệp & Tải Về Thiết Bị</span>
             <Tag color="cyan" className="!text-xs">{files.length} tệp</Tag>
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            Đường dẫn thư mục: <span className="font-mono text-slate-300 font-medium">{outputFolder}</span>
+            Vị trí lưu trữ trên Server: <span className="font-mono text-slate-300 font-medium">{outputFolder}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {files.length > 0 && (
+            <Button
+              type="primary"
+              icon={<CloudDownloadOutlined />}
+              loading={downloadingAll}
+              onClick={handleDownloadAll}
+              className="!bg-emerald-600 !border-emerald-600 text-xs font-semibold shadow-md shadow-emerald-600/25"
+            >
+              Tải Tất Cả Về Máy ({files.length} tệp)
+            </Button>
+          )}
+
           <Button
             type="default"
             icon={<ReloadOutlined />}
@@ -228,12 +278,12 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
           </Button>
 
           <Button
-            type="primary"
+            type="default"
             icon={<FolderOpenOutlined />}
             onClick={handleOpenFolder}
-            className="!bg-indigo-600 !border-indigo-600 text-xs font-semibold"
+            className="!bg-slate-900 !border-slate-700 !text-slate-400 text-xs"
           >
-            Mở Trong File Explorer
+            Mở Thư Mục Server
           </Button>
         </div>
       </div>

@@ -1,15 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Clock,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  FileCheck,
   Film,
   Image as ImageIcon,
-  ExternalLink,
   Youtube,
   Video,
   Instagram,
@@ -20,7 +18,9 @@ import {
   XCircle,
   Square,
   Ban,
-  Slash,
+  Download,
+  DownloadCloud,
+  Check,
 } from 'lucide-react';
 import { DownloadTaskItem, FailedLinkRecord, SupportedPlatform } from '@/types';
 
@@ -70,11 +70,50 @@ export const QueueProgressTable: React.FC<Props> = ({
   onCancelAll,
   onCancelTask,
 }) => {
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadedAllSuccess, setDownloadedAllSuccess] = useState(false);
+
   if (tasks.length === 0) return null;
 
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
   const failedCount = tasks.filter((t) => t.status === 'failed').length;
   const cancelledCount = tasks.filter((t) => t.status === 'cancelled').length;
+
+  // Extract all completed result files
+  const allCompletedFiles = tasks
+    .filter((t) => t.status === 'completed' && t.resultFiles && t.resultFiles.length > 0)
+    .flatMap((t) => t.resultFiles || []);
+
+  const handleDownloadAll = async () => {
+    if (allCompletedFiles.length === 0 || downloadingAll) return;
+    setDownloadingAll(true);
+    setDownloadedAllSuccess(false);
+
+    try {
+      // Trigger download for each file with small stagger delay so browser doesn't block
+      for (let i = 0; i < allCompletedFiles.length; i++) {
+        const file = allCompletedFiles[i];
+        const downloadUrl = `/api/storage/download?path=${encodeURIComponent(file.filePath)}`;
+        
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = file.fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        if (i < allCompletedFiles.length - 1) {
+          await new Promise((res) => setTimeout(res, 350));
+        }
+      }
+      setDownloadedAllSuccess(true);
+      setTimeout(() => setDownloadedAllSuccess(false), 4000);
+    } catch (err) {
+      console.error('Error downloading all files:', err);
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
 
   return (
     <div className="glass-card rounded-2xl p-5 border border-slate-800 space-y-5">
@@ -83,11 +122,11 @@ export const QueueProgressTable: React.FC<Props> = ({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-slate-200">
-              Tiến độ Xử lý Tuần tự
+              Tiến độ Xử lý & Tải về Trình duyệt
             </h3>
             {isDone ? (
-              <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                Đã hoàn tất tiến trình
+              <span className="text-xs px-2.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Đã hoàn tất tiến trình
               </span>
             ) : (
               <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
@@ -107,7 +146,39 @@ export const QueueProgressTable: React.FC<Props> = ({
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Download All Completed Files to Device */}
+          {allCompletedFiles.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDownloadAll}
+              disabled={downloadingAll}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold shadow-md transition-all ${
+                downloadedAllSuccess
+                  ? 'bg-emerald-600 text-white border border-emerald-500 shadow-emerald-600/30'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-500/40 shadow-emerald-500/20'
+              }`}
+              title="Tải tất cả các tệp đã hoàn thành về máy tính/điện thoại"
+            >
+              {downloadingAll ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Đang tải {allCompletedFiles.length} tệp...</span>
+                </>
+              ) : downloadedAllSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Đã gửi {allCompletedFiles.length} tệp xuống máy!</span>
+                </>
+              ) : (
+                <>
+                  <DownloadCloud className="w-4 h-4 text-white" />
+                  <span>Tải tất cả về máy ({allCompletedFiles.length} tệp)</span>
+                </>
+              )}
+            </button>
+          )}
+
           {/* Stop All Remaining Clips Button */}
           {!isDone && onCancelAll && (
             <button
@@ -157,8 +228,8 @@ export const QueueProgressTable: React.FC<Props> = ({
               <th className="py-3 px-4 w-12">#</th>
               <th className="py-3 px-4 w-28">Nền tảng</th>
               <th className="py-3 px-4">Đường link URL</th>
-              <th className="py-3 px-4 w-48">Trạng thái</th>
-              <th className="py-3 px-4 w-56">Kết quả & File</th>
+              <th className="py-3 px-4 w-44">Trạng thái</th>
+              <th className="py-3 px-4">Kết quả & Tải về máy</th>
               <th className="py-3 px-4 w-24 text-center">Thao tác</th>
             </tr>
           </thead>
@@ -188,7 +259,7 @@ export const QueueProgressTable: React.FC<Props> = ({
 
                   {/* URL */}
                   <td className="py-3 px-4">
-                    <div className="truncate max-w-[260px] font-mono text-slate-400" title={task.url}>
+                    <div className="truncate max-w-[240px] font-mono text-slate-400" title={task.url}>
                       {task.url}
                     </div>
                   </td>
@@ -216,7 +287,7 @@ export const QueueProgressTable: React.FC<Props> = ({
                     {task.status === 'downloading' && (
                       <div className="space-y-1">
                         <span className="inline-flex items-center gap-1 text-indigo-400 font-medium">
-                          <Loader2 className="w-3 h-3 animate-spin" /> Đang tải... ({task.progress}%)
+                          <Loader2 className="w-3 h-3 animate-spin" /> Đang tải ({task.progress}%)
                         </span>
                         <div className="w-28 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                           <div
@@ -246,27 +317,46 @@ export const QueueProgressTable: React.FC<Props> = ({
                     )}
                   </td>
 
-                  {/* Result files */}
+                  {/* Result files & Direct Browser Download */}
                   <td className="py-3 px-4">
                     {task.resultFiles && task.resultFiles.length > 0 ? (
-                      <div className="space-y-1">
-                        {task.resultFiles.map((rf, rIdx) => (
-                          <div
-                            key={rIdx}
-                            className="flex items-center gap-1.5 text-[11px] text-slate-300 font-mono"
-                            title={rf.filePath}
-                          >
-                            {rf.type === 'video' ? (
-                              <Film className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                            ) : (
-                              <ImageIcon className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                            )}
-                            <span className="truncate max-w-[160px]">{rf.fileName}</span>
-                            {rf.sizeBytes && (
-                              <span className="text-slate-500 shrink-0">({formatBytes(rf.sizeBytes)})</span>
-                            )}
-                          </div>
-                        ))}
+                      <div className="space-y-1.5">
+                        {task.resultFiles.map((rf, rIdx) => {
+                          const downloadUrl = `/api/storage/download?path=${encodeURIComponent(rf.filePath)}`;
+                          return (
+                            <div
+                              key={rIdx}
+                              className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-900/80 border border-slate-800/80 max-w-[340px]"
+                            >
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-300 font-mono truncate">
+                                {rf.type === 'video' ? (
+                                  <Film className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                ) : (
+                                  <ImageIcon className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                )}
+                                <span className="truncate max-w-[150px]" title={rf.fileName}>
+                                  {rf.fileName}
+                                </span>
+                                {rf.sizeBytes && (
+                                  <span className="text-slate-500 shrink-0 text-[10px]">
+                                    ({formatBytes(rf.sizeBytes)})
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Direct Browser Download Button */}
+                              <a
+                                href={downloadUrl}
+                                download={rf.fileName}
+                                title="Tải tệp này về máy tính / điện thoại"
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all shrink-0 hover:scale-105"
+                              >
+                                <Download className="w-3 h-3 text-emerald-400" />
+                                <span>Tải về</span>
+                              </a>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : task.error ? (
                       <span className="text-rose-400/80 text-[11px] truncate block max-w-[180px]" title={task.error}>

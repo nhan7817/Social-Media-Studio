@@ -229,9 +229,11 @@ export default function Home() {
 
   const handleOpenFolder = async () => {
     try {
-      await axios.post('/api/open-folder', { folderPath: outputFolder });
+      const res = await axios.post('/api/open-folder', { folderPath: outputFolder });
+      if (res.data?.success) return;
     } catch {
-      alert('Không thể mở thư mục trên hệ thống.');
+      // If remote server or explorer fails, navigate user to storage tab
+      setActiveModule('storage');
     }
   };
 

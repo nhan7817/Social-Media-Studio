@@ -193,15 +193,26 @@ export const AudioExtractorTab: React.FC<Props> = ({ outputFolder }) => {
                         </div>
                       </div>
 
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<FolderOpenOutlined />}
-                        onClick={handleOpenFolder}
-                        className="!text-slate-400 hover:!text-purple-400 text-xs shrink-0"
-                      >
-                        Vị trí
-                      </Button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <a
+                          href={`/api/storage/download?path=${encodeURIComponent(item.filePath)}`}
+                          download={item.fileName}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs font-semibold transition-all hover:scale-105"
+                          title="Tải tệp âm thanh này về máy"
+                        >
+                          <DownloadOutlined />
+                          <span>Tải về</span>
+                        </a>
+
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<FolderOpenOutlined />}
+                          onClick={handleOpenFolder}
+                          className="!text-slate-500 hover:!text-purple-400 text-xs"
+                          title="Vị trí file trên Server"
+                        />
+                      </div>
                     </div>
                   </List.Item>
                 )}
