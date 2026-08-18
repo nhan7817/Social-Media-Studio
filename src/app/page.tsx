@@ -1,0 +1,365 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  DownloadTaskItem,
+  FailedLinkRecord,
+  ProgressEventPayload,
+  SupportedPlatform,
+  WatermarkConfig,
+} from '@/types';
+import { AntdAppLayout, ActiveModuleKey } from '@/components/layout/AntdAppLayout';
+import { LinkInputSection } from '@/components/LinkInputSection';
+import { StorageFolderPicker } from '@/components/StorageFolderPicker';
+import { WatermarkSettings } from '@/components/WatermarkSettings';
+import { QueueProgressTable } from '@/components/QueueProgressTable';
+import { FailedLinksModal } from '@/components/FailedLinksModal';
+import { AudioExtractorTab } from '@/components/modules/AudioExtractorTab';
+import { AspectConverterTab } from '@/components/modules/AspectConverterTab';
+import { VideoEditorTab } from '@/components/modules/VideoEditorTab';
+import { HistoryManagerTab } from '@/components/modules/HistoryManagerTab';
+import { SettingsTab } from '@/components/modules/SettingsTab';
+import { Layers, ShieldCheck, Zap } from 'lucide-react';
+import axios from 'axios';
+
+const DEFAULT_WATERMARK: WatermarkConfig = {
+  enabled: true,
+  type: 'text',
+  text: '@MyBrand',
+  fontSize: 32,
+  fontColor: '#ffffff',
+  fontFamily: 'Arial, sans-serif',
+  imagePath: '',
+  imageScale: 15,
+  position: 'bottom-right',
+  animation: 'none',
+  animationSpeed: 1,
+  opacity: 85,
+  margin: 24,
+  outputAspectRatio: 'original',
+};
+
+export default function Home() {
+  const [activeModule, setActiveModule] = useState<ActiveModuleKey>('downloader');
+  const [rawLinks, setRawLinks] = useState<string>('');
+  const [selectedPlatform, setSelectedPlatform] = useState<SupportedPlatform>('auto');
+  const [outputFolder, setOutputFolder] = useState<string>('');
+  const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK);
+
+  // Job Progress State
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<DownloadTaskItem[]>([]);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState<number>(0);
+  const [overallProgress, setOverallProgress] = useState<number>(0);
+  const [failedLinks, setFailedLinks] = useState<FailedLinkRecord[]>([]);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isDone, setIsDone] = useState<boolean>(false);
+  const [isFailedModalOpen, setIsFailedModalOpen] = useState<boolean>(false);
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Clean up SSE on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const handleStartDownload = async () => {
+    const urls = rawLinks
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (urls.length === 0) return;
+
+    setIsProcessing(true);
+    setIsDone(false);
+    setFailedLinks([]);
+    setOverallProgress(0);
+    setCurrentTaskIndex(0);
+
+    const initialTasks: DownloadTaskItem[] = urls.map((url, i) => ({
+      id: `task_${Date.now()}_${i}`,
+      url,
+      platform: selectedPlatform,
+      detectedPlatform: selectedPlatform,
+      status: 'pending',
+      progress: 0,
+    }));
+    setTasks(initialTasks);
+
+    try {
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasks: initialTasks.map((t) => ({ id: t.id, url: t.url, platform: t.platform })),
+          outputDirectory: outputFolder,
+          watermark: watermarkConfig,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.jobId) {
+        throw new Error(data.error || 'Lỗi khởi chạy tiến trình.');
+      }
+
+      setJobId(data.jobId);
+      listenToProgress(data.jobId);
+    } catch (err: any) {
+      alert(`Không thể bắt đầu: ${err.message}`);
+      setIsProcessing(false);
+    }
+  };
+
+  const listenToProgress = (currentJobId: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const es = new EventSource(`/api/download/progress?jobId=${currentJobId}`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data: ProgressEventPayload = JSON.parse(event.data);
+
+        setTasks((prevTasks) => {
+          const index = prevTasks.findIndex((t) => t.id === data.task.id);
+          if (index !== -1) {
+            const next = [...prevTasks];
+            next[index] = data.task;
+            return next;
+          }
+          return prevTasks;
+        });
+
+        setCurrentTaskIndex(data.currentTaskIndex);
+        setOverallProgress(data.overallProgress);
+        setFailedLinks(data.failedLinks || []);
+
+        if (data.isDone) {
+          setIsDone(true);
+          setIsProcessing(false);
+          es.close();
+        }
+      } catch (e) {
+        console.error('Error parsing SSE progress event:', e);
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      pollProgress(currentJobId);
+    };
+  };
+
+  const pollProgress = async (currentJobId: string) => {
+    try {
+      const res = await fetch(`/api/download/progress?jobId=${currentJobId}&mode=poll`);
+      const data = await res.json();
+
+      if (data.tasks) {
+        setTasks(data.tasks);
+        setCurrentTaskIndex(data.currentTaskIndex);
+        setOverallProgress(data.overallProgress);
+        setFailedLinks(data.failedLinks || []);
+      }
+
+      if (data.isDone) {
+        setIsDone(true);
+        setIsProcessing(false);
+      } else {
+        setTimeout(() => pollProgress(currentJobId), 1500);
+      }
+    } catch {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRetryFailed = (failedUrls: string[]) => {
+    setRawLinks(failedUrls.join('\n'));
+    setTimeout(() => {
+      handleStartDownload();
+    }, 100);
+  };
+
+  const handleCancelAll = async () => {
+    if (!jobId) return;
+    try {
+      await fetch('/api/download/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, action: 'cancel_all' }),
+      });
+      setIsProcessing(false);
+      setIsDone(true);
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.status === 'pending' || t.status === 'downloading' || t.status === 'watermarking'
+            ? { ...t, status: 'cancelled', statusMessage: 'Đã dừng' }
+            : t
+        )
+      );
+    } catch (err: any) {
+      console.error('Cancel all error:', err);
+    }
+  };
+
+  const handleCancelTask = async (taskId: string) => {
+    if (!jobId) return;
+    try {
+      await fetch('/api/download/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, action: 'cancel_task', taskId }),
+      });
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, status: 'cancelled', statusMessage: 'Đã dừng' } : t
+        )
+      );
+    } catch (err: any) {
+      console.error('Cancel task error:', err);
+    }
+  };
+
+  const handleOpenFolder = async () => {
+    try {
+      await axios.post('/api/open-folder', { folderPath: outputFolder });
+    } catch {
+      alert('Không thể mở thư mục trên hệ thống.');
+    }
+  };
+
+  const runningCount = tasks.filter((t) => t.status === 'downloading' || t.status === 'watermarking' || t.status === 'pending').length;
+  const completedCount = tasks.filter((t) => t.status === 'completed').length;
+
+  return (
+    <AntdAppLayout
+      activeKey={activeModule}
+      onSelectKey={setActiveModule}
+      outputFolder={outputFolder || 'Mặc định (Downloads/SocialMedia)'}
+      onOpenFolder={handleOpenFolder}
+      runningTasksCount={isProcessing ? runningCount : 0}
+      completedTasksCount={completedCount}
+    >
+      {/* Module 1: Core Downloader & Watermarker */}
+      {activeModule === 'downloader' && (
+        <div className="space-y-8 pb-12">
+          {/* Top Banner Feature Highlights */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="glass-card-subtle rounded-xl p-4 flex items-center gap-3 border border-slate-800">
+              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                <Layers className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold text-slate-200">Xử lý Hàng loạt Tuần tự</h4>
+                <p className="text-[11px] text-slate-400">Tải tuần tự từng video tránh nghẽn mạng & rate-limit</p>
+              </div>
+            </div>
+
+            <div className="glass-card-subtle rounded-xl p-4 flex items-center gap-3 border border-slate-800">
+              <div className="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold text-slate-200">Bảo vệ Lỗi & Lưu Link Hỏng</h4>
+                <p className="text-[11px] text-slate-400">Gặp link lỗi tự lưu lại và tiếp tục chạy không gián đoạn</p>
+              </div>
+            </div>
+
+            <div className="glass-card-subtle rounded-xl p-4 flex items-center gap-3 border border-slate-800">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
+                <Zap className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold text-slate-200">Tự động Đóng Dấu Bản Quyền</h4>
+                <p className="text-[11px] text-slate-400">Gắn Text / Logo PNG vào Video & Ảnh bằng FFmpeg</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Grid: Inputs and Settings */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Link Input & Storage */}
+            <div className="lg:col-span-6 space-y-6">
+              <LinkInputSection
+                rawLinks={rawLinks}
+                selectedPlatform={selectedPlatform}
+                isProcessing={isProcessing}
+                onLinksChange={setRawLinks}
+                onPlatformChange={setSelectedPlatform}
+                onSubmit={handleStartDownload}
+              />
+
+              <StorageFolderPicker
+                folderPath={outputFolder}
+                onChange={setOutputFolder}
+              />
+            </div>
+
+            {/* Right Column: Watermark Settings */}
+            <div className="lg:col-span-6">
+              <WatermarkSettings
+                config={watermarkConfig}
+                onChange={setWatermarkConfig}
+              />
+            </div>
+          </div>
+
+          {/* Bottom Section: Real-time Queue Progress Table */}
+          <QueueProgressTable
+            tasks={tasks}
+            currentTaskIndex={currentTaskIndex}
+            overallProgress={overallProgress}
+            failedLinks={failedLinks}
+            isDone={isDone}
+            onOpenFailedModal={() => setIsFailedModalOpen(true)}
+            onCancelAll={handleCancelAll}
+            onCancelTask={handleCancelTask}
+          />
+
+          {/* Failed Links Detail & Retry Modal */}
+          <FailedLinksModal
+            isOpen={isFailedModalOpen}
+            failedLinks={failedLinks}
+            onClose={() => setIsFailedModalOpen(false)}
+            onRetryFailed={handleRetryFailed}
+          />
+        </div>
+      )}
+
+      {/* Module 2: Video Editor & Logo Blur Studio */}
+      {activeModule === 'editor' && (
+        <VideoEditorTab outputFolder={outputFolder} />
+      )}
+
+      {/* Module 3: Audio Extractor */}
+      {activeModule === 'audio' && (
+        <AudioExtractorTab outputFolder={outputFolder} />
+      )}
+
+      {/* Module 3: Aspect Ratio Converter */}
+      {activeModule === 'aspect' && (
+        <AspectConverterTab outputFolder={outputFolder} />
+      )}
+
+      {/* Module 4: History & Storage Manager */}
+      {activeModule === 'storage' && (
+        <HistoryManagerTab outputFolder={outputFolder} />
+      )}
+
+      {/* Module 5: Settings & Engine Status */}
+      {activeModule === 'settings' && (
+        <SettingsTab
+          outputFolder={outputFolder}
+          onOutputFolderChange={setOutputFolder}
+        />
+      )}
+    </AntdAppLayout>
+  );
+}
