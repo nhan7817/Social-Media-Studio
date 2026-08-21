@@ -51,12 +51,16 @@ export const HistoryManagerTab: React.FC<Props> = ({ outputFolder }) => {
   const [downloadingAll, setDownloadingAll] = useState(false);
 
   const fetchFiles = async () => {
+    if (!outputFolder) {
+      setFiles([]);
+      return;
+    }
     setLoading(true);
     try {
       const res = await axios.get(`/api/storage/files?folder=${encodeURIComponent(outputFolder)}`);
       setFiles(res.data?.files || []);
     } catch {
-      message.error('Không thể đọc danh sách file từ thư mục lưu trữ.');
+      setFiles([]);
     } finally {
       setLoading(false);
     }

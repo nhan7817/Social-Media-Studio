@@ -40,14 +40,26 @@ const DEFAULT_WATERMARK: WatermarkConfig = {
   outputAspectRatio: 'original',
 };
 
+import { openNativeFolderDialog } from '@/lib/utils/folder-dialog';
+import { message } from 'antd';
+
 const VALID_MODULES: ActiveModuleKey[] = ['downloader', 'trim-merge', 'editor', 'audio', 'aspect', 'storage', 'settings'];
 
 export default function Home() {
   const [activeModule, setActiveModuleState] = useState<ActiveModuleKey>('downloader');
   const [rawLinks, setRawLinks] = useState<string>('');
   const [selectedPlatform, setSelectedPlatform] = useState<SupportedPlatform>('auto');
-  const [outputFolder, setOutputFolder] = useState<string>('');
+  const [outputFolder, setOutputFolderState] = useState<string>('');
   const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK);
+
+  const setOutputFolder = (folder: string) => {
+    setOutputFolderState(folder);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('social_studio_storage_folder', folder);
+      } catch {}
+    }
+  };
 
   // Sync module change to URL and LocalStorage
   const setActiveModule = (key: ActiveModuleKey) => {
@@ -62,10 +74,11 @@ export default function Home() {
     }
   };
 
-  // Restore active module on initial load
+  // Restore active module and saved storage folder on initial load
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
+        // 1. Restore Tab
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab') as ActiveModuleKey | null;
         const savedTab = localStorage.getItem('social_studio_active_tab') as ActiveModuleKey | null;
@@ -78,11 +91,16 @@ export default function Home() {
 
         setActiveModuleState(targetTab);
 
-        // Keep URL in sync
         const url = new URL(window.location.href);
         if (url.searchParams.get('tab') !== targetTab) {
           url.searchParams.set('tab', targetTab);
           window.history.replaceState({}, '', url.toString());
+        }
+
+        // 2. Restore Output Folder from user's previous selection
+        const savedFolder = localStorage.getItem('social_studio_storage_folder');
+        if (savedFolder) {
+          setOutputFolderState(savedFolder);
         }
       } catch {}
     }
@@ -117,6 +135,19 @@ export default function Home() {
 
     if (urls.length === 0) return;
 
+    // Prompt user to select storage folder if not chosen yet
+    let targetDirectory = outputFolder;
+    if (!targetDirectory) {
+      message.info('Vui lòng chọn thư mục lưu trữ trên máy tính của bạn trước khi bắt đầu.');
+      const picked = await openNativeFolderDialog();
+      if (!picked) {
+        message.warning('Bạn chưa chọn thư mục lưu trữ để bắt đầu.');
+        return;
+      }
+      targetDirectory = picked;
+      setOutputFolder(picked);
+    }
+
     setIsProcessing(true);
     setIsDone(false);
     setFailedLinks([]);
@@ -139,7 +170,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tasks: initialTasks.map((t) => ({ id: t.id, url: t.url, platform: t.platform })),
-          outputDirectory: outputFolder,
+          outputDirectory: targetDirectory,
           watermark: watermarkConfig,
         }),
       });
@@ -270,11 +301,17 @@ export default function Home() {
   };
 
   const handleOpenFolder = async () => {
+    if (!outputFolder) {
+      const picked = await openNativeFolderDialog();
+      if (picked) {
+        setOutputFolder(picked);
+      }
+      return;
+    }
     try {
       const res = await axios.post('/api/open-folder', { folderPath: outputFolder });
       if (res.data?.success) return;
     } catch {
-      // If remote server or explorer fails, navigate user to storage tab
       setActiveModule('storage');
     }
   };
@@ -286,7 +323,7 @@ export default function Home() {
     <AntdAppLayout
       activeKey={activeModule}
       onSelectKey={setActiveModule}
-      outputFolder={outputFolder || 'Mặc định (Downloads/SocialMedia)'}
+      outputFolder={outputFolder || 'Chưa chọn thư mục (Bấm để chọn)'}
       onOpenFolder={handleOpenFolder}
       runningTasksCount={isProcessing ? runningCount : 0}
       completedTasksCount={completedCount}

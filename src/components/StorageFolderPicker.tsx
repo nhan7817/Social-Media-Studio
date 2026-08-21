@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Folder, FolderCheck, HardDrive, Download, Globe, Info } from 'lucide-react';
+import { Folder, FolderCheck, HardDrive, Download, FolderOpen, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Button, message, Tag } from 'antd';
+import { FolderOpenOutlined } from '@ant-design/icons';
+import { openNativeFolderDialog } from '@/lib/utils/folder-dialog';
 
 interface Props {
   folderPath: string;
@@ -12,21 +15,29 @@ export const StorageFolderPicker: React.FC<Props> = ({ folderPath, onChange }) =
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
   const [isValid, setIsValid] = useState(true);
+  const [isOpeningDialog, setIsOpeningDialog] = useState(false);
 
   useEffect(() => {
-    // Fetch default paths
+    // Only load suggestions for quick click, do NOT set default path
     fetch('/api/select-folder')
       .then((res) => res.json())
       .then((data) => {
-        if (data.defaultPath && !folderPath) {
-          onChange(data.defaultPath);
-        }
         if (data.suggestions) {
           setSuggestions(data.suggestions);
         }
       })
       .catch(() => {});
   }, []);
+
+  const handlePickFolder = async () => {
+    setIsOpeningDialog(true);
+    const selected = await openNativeFolderDialog();
+    setIsOpeningDialog(false);
+    if (selected) {
+      onChange(selected);
+      setIsValid(true);
+    }
+  };
 
   const handleBlur = async () => {
     if (!folderPath) return;
@@ -53,56 +64,74 @@ export const StorageFolderPicker: React.FC<Props> = ({ folderPath, onChange }) =
           <Folder className="w-5 h-5 text-indigo-400" />
           <div>
             <h2 className="text-sm font-semibold text-slate-200">
-              Thư mục Xử lý Tạm trên Server
+              Thư Mục Lưu Trữ Trên Máy Tính
             </h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-[11px] text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
-            <Download className="w-3 h-3 text-indigo-400" /> Tải về máy qua Web
-          </span>
-          {isValid && (
-            <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-              <FolderCheck className="w-3.5 h-3.5" /> Sẵn sàng
-            </span>
+
+        <div>
+          {folderPath ? (
+            <Tag color="success" className="!m-0 !px-2 !py-0.5 !text-xs !flex !items-center !gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Đã chọn thư mục
+            </Tag>
+          ) : (
+            <Tag color="warning" className="!m-0 !px-2 !py-0.5 !text-xs !flex !items-center !gap-1">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400" /> Chưa chọn thư mục
+            </Tag>
           )}
         </div>
       </div>
 
-      {/* Domain / Web Storage Info banner */}
-      <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-start gap-2.5 text-xs text-slate-400">
-        <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-        <p className="leading-relaxed">
-          <strong className="text-slate-200">Cơ chế Web Online:</strong> Video sẽ được xử lý trên máy chủ và xuất hiện nút <span className="text-emerald-400 font-semibold">"Tải về máy"</span> ngay khi hoàn tất để bạn lưu trực tiếp về máy tính/điện thoại qua trình duyệt.
-        </p>
-      </div>
+      {/* Action Pick Folder Button & Input Field */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={folderPath}
+              onChange={(e) => {
+                onChange(e.target.value);
+                setIsValid(true);
+              }}
+              onBlur={handleBlur}
+              placeholder="Chưa chọn thư mục (Bấm nút 'Chọn Thư Mục Máy Tính' bên cạnh)"
+              className={`w-full bg-slate-900/90 border rounded-xl px-4 py-2.5 text-xs font-mono transition-all focus:outline-none ${
+                folderPath
+                  ? 'text-emerald-300 border-emerald-500/40 focus:border-emerald-500'
+                  : 'text-slate-400 border-amber-500/40 focus:border-indigo-500 placeholder-slate-500'
+              }`}
+            />
+          </div>
 
-      <div className="space-y-2.5">
-        <div className="relative">
-          <input
-            type="text"
-            value={folderPath}
-            onChange={(e) => {
-              onChange(e.target.value);
-              setIsValid(true);
-            }}
-            onBlur={handleBlur}
-            placeholder="Mặc định: Thư mục lưu trữ nội bộ của hệ thống"
-            className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono transition-all"
-          />
+          <Button
+            type="primary"
+            icon={<FolderOpenOutlined />}
+            loading={isOpeningDialog}
+            onClick={handlePickFolder}
+            className="!bg-gradient-to-r !from-indigo-600 !to-purple-600 !border-0 font-bold text-xs h-10 px-4 rounded-xl shadow-md shadow-indigo-500/20 whitespace-nowrap"
+          >
+            Chọn Thư Mục Máy Tính
+          </Button>
         </div>
 
         {/* Suggestions pills */}
         {suggestions.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             <span className="text-[11px] text-slate-400 flex items-center gap-1 mr-1">
-              <HardDrive className="w-3 h-3 text-slate-500" /> Vị trí server:
+              <HardDrive className="w-3 h-3 text-slate-500" /> Gợi ý nhanh:
             </span>
             {suggestions.map((p, idx) => (
               <button
                 key={idx}
                 type="button"
-                onClick={() => onChange(p)}
+                onClick={() => {
+                  onChange(p);
+                  if (typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem('social_studio_storage_folder', p);
+                    } catch {}
+                  }
+                }}
                 className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all truncate max-w-[320px] ${
                   folderPath === p
                     ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 font-medium'

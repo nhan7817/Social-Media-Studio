@@ -27,6 +27,7 @@ import {
 import { Sparkles, Eraser, Film, Grid3X3, Eye, Type, Image as ImageIcon, Scan, Scissors, Wind } from 'lucide-react';
 import { WatermarkConfig, WatermarkPosition, AspectRatio, OutputAspectRatio, BlurPosition, BlurZone, WatermarkAnimation } from '@/types';
 import { InteractiveLogoRemoverModal } from './InteractiveLogoRemoverModal';
+import { openNativeFolderDialog } from '@/lib/utils/folder-dialog';
 import axios from 'axios';
 
 const { Title, Paragraph, Text } = Typography;
@@ -142,6 +143,17 @@ export const VideoEditorTab: React.FC<Props> = ({ outputFolder }) => {
       return;
     }
 
+    let targetDirectory = outputFolder;
+    if (!targetDirectory) {
+      message.info('Vui lòng chọn thư mục lưu trữ trên máy tính của bạn trước khi render video.');
+      const picked = await openNativeFolderDialog();
+      if (!picked) {
+        message.warning('Bạn chưa chọn thư mục lưu trữ để xuất video.');
+        return;
+      }
+      targetDirectory = picked;
+    }
+
     setIsProcessing(true);
     message.loading({ content: 'Đang xử lý làm mờ logo và render video...', key: 'render_msg', duration: 0 });
 
@@ -169,7 +181,7 @@ export const VideoEditorTab: React.FC<Props> = ({ outputFolder }) => {
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('config', JSON.stringify(config));
-    formData.append('outputFolder', outputFolder);
+    formData.append('outputFolder', targetDirectory);
 
     try {
       const res = await axios.post('/api/video/edit', formData, {
@@ -191,6 +203,10 @@ export const VideoEditorTab: React.FC<Props> = ({ outputFolder }) => {
   };
 
   const handleOpenFolder = async () => {
+    if (!outputFolder) {
+      await openNativeFolderDialog();
+      return;
+    }
     try {
       await axios.post('/api/open-folder', { folderPath: outputFolder });
     } catch {

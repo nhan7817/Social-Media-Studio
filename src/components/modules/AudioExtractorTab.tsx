@@ -20,6 +20,7 @@ import {
   LoadingOutlined,
   CheckCircleFilled,
 } from '@ant-design/icons';
+import { openNativeFolderDialog } from '@/lib/utils/folder-dialog';
 import axios from 'axios';
 
 const { TextArea } = Input;
@@ -55,6 +56,17 @@ export const AudioExtractorTab: React.FC<Props> = ({ outputFolder }) => {
       return;
     }
 
+    let targetDirectory = outputFolder;
+    if (!targetDirectory) {
+      message.info('Vui lòng chọn thư mục lưu trữ trên máy tính của bạn trước khi trích xuất âm thanh.');
+      const picked = await openNativeFolderDialog();
+      if (!picked) {
+        message.warning('Bạn chưa chọn thư mục lưu trữ để trích xuất.');
+        return;
+      }
+      targetDirectory = picked;
+    }
+
     setIsExtracting(true);
     message.loading({ content: `Đang trích xuất ${rawList.length} âm thanh...`, key: 'extract_msg' });
 
@@ -66,7 +78,7 @@ export const AudioExtractorTab: React.FC<Props> = ({ outputFolder }) => {
         const res = await axios.post('/api/audio/extract', {
           url,
           outputFormat: audioFormat,
-          outputFolder,
+          outputFolder: targetDirectory,
         });
 
         if (res.data?.success && res.data?.file) {
@@ -90,6 +102,10 @@ export const AudioExtractorTab: React.FC<Props> = ({ outputFolder }) => {
   };
 
   const handleOpenFolder = async () => {
+    if (!outputFolder) {
+      await openNativeFolderDialog();
+      return;
+    }
     try {
       await axios.post('/api/open-folder', { folderPath: outputFolder });
     } catch {

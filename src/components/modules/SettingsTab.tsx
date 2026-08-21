@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Button,
@@ -19,6 +19,7 @@ import {
   CloudDownloadOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
+import { openNativeFolderDialog } from '@/lib/utils/folder-dialog';
 import axios from 'axios';
 
 const { Title, Paragraph, Text } = Typography;
@@ -35,6 +36,18 @@ export const SettingsTab: React.FC<Props> = ({
   const [folderInput, setFolderInput] = useState(outputFolder);
   const [isUpdatingBinary, setIsUpdatingBinary] = useState(false);
 
+  useEffect(() => {
+    setFolderInput(outputFolder);
+  }, [outputFolder]);
+
+  const handlePickFolder = async () => {
+    const picked = await openNativeFolderDialog();
+    if (picked) {
+      setFolderInput(picked);
+      onOutputFolderChange(picked);
+    }
+  };
+
   const handleSaveOutputFolder = () => {
     if (!folderInput.trim()) {
       message.error('Vui lòng nhập đường dẫn thư mục.');
@@ -45,6 +58,10 @@ export const SettingsTab: React.FC<Props> = ({
   };
 
   const handleOpenFolder = async () => {
+    if (!outputFolder) {
+      await handlePickFolder();
+      return;
+    }
     try {
       await axios.post('/api/open-folder', { folderPath: outputFolder });
     } catch {
@@ -64,7 +81,7 @@ export const SettingsTab: React.FC<Props> = ({
             </h3>
           </div>
           <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-            Quản lý đường dẫn lưu trữ tệp mặc định, kiểm tra trạng thái engine yt-dlp & FFmpeg và cấu hình hệ thống.
+            Quản lý đường dẫn lưu trữ tệp, kiểm tra trạng thái engine yt-dlp & FFmpeg và cấu hình hệ thống.
           </p>
         </div>
       </div>
@@ -72,22 +89,31 @@ export const SettingsTab: React.FC<Props> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Storage settings */}
         <div className="lg:col-span-7 space-y-6">
-          <Card title="1. Thư mục lưu trữ mặc định" className="border-slate-800">
+          <Card title="1. Thư mục lưu trữ trên máy tính" className="border-slate-800">
             <div className="space-y-4">
               <div>
                 <span className="text-xs text-slate-400 block mb-1.5 font-medium">
                   Đường dẫn thư mục lưu video & ảnh xuất bản:
                 </span>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     value={folderInput}
+                    placeholder="Chưa chọn thư mục (Bấm 'Chọn Thư Mục' để duyệt)"
                     onChange={(e) => setFolderInput(e.target.value)}
-                    className="font-mono text-xs"
+                    className="font-mono text-xs flex-1"
                   />
                   <Button
                     type="primary"
+                    icon={<FolderOpenOutlined />}
+                    onClick={handlePickFolder}
+                    className="!bg-gradient-to-r !from-indigo-600 !to-purple-600 !border-0 font-semibold text-xs"
+                  >
+                    Chọn Thư Mục
+                  </Button>
+                  <Button
+                    type="default"
                     onClick={handleSaveOutputFolder}
-                    className="!bg-indigo-600 shrink-0 font-medium"
+                    className="!bg-slate-900 !border-slate-700 !text-slate-300 font-medium text-xs"
                   >
                     Lưu
                   </Button>

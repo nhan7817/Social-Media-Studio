@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
@@ -16,21 +16,26 @@ export async function POST(req: NextRequest) {
     }
 
     const platform = process.platform;
-    let command = '';
 
     if (platform === 'win32') {
-      command = `explorer.exe "${resolved}"`;
+      const child = spawn('explorer.exe', [resolved], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
     } else if (platform === 'darwin') {
-      command = `open "${resolved}"`;
+      const child = spawn('open', [resolved], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
     } else {
-      command = `xdg-open "${resolved}"`;
+      const child = spawn('xdg-open', [resolved], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
     }
-
-    exec(command, (err) => {
-      if (err) {
-        console.error('Error opening folder:', err);
-      }
-    });
 
     return NextResponse.json({ success: true, path: resolved });
   } catch (error: any) {

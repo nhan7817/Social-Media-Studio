@@ -38,6 +38,7 @@ import {
   VideoCameraOutlined,
 } from '@ant-design/icons';
 import { Scissors, Film, SplitSquareVertical, Sparkles, Music, Layers, Eye } from 'lucide-react';
+import { openNativeFolderDialog } from '@/lib/utils/folder-dialog';
 import axios from 'axios';
 
 const { Title, Paragraph, Text } = Typography;
@@ -313,6 +314,17 @@ export const VideoTrimMergeTab: React.FC<Props> = ({ outputFolder }) => {
       return;
     }
 
+    let targetDirectory = outputFolder;
+    if (!targetDirectory) {
+      message.info('Vui lòng chọn thư mục lưu trữ trên máy tính của bạn trước khi cắt video.');
+      const picked = await openNativeFolderDialog();
+      if (!picked) {
+        message.warning('Bạn chưa chọn thư mục lưu trữ để xuất video.');
+        return;
+      }
+      targetDirectory = picked;
+    }
+
     setTrimIsProcessing(true);
     message.loading({ content: 'Đang thực hiện cắt và xuất phân đoạn video...', key: 'trim_msg', duration: 0 });
 
@@ -322,7 +334,7 @@ export const VideoTrimMergeTab: React.FC<Props> = ({ outputFolder }) => {
     formData.append('mode', trimExportMode);
     formData.append('qualityMode', trimQualityMode);
     formData.append('muteAudio', String(trimMuteAudio));
-    formData.append('outputFolder', outputFolder);
+    formData.append('outputFolder', targetDirectory);
 
     try {
       const res = await axios.post('/api/video/trim', formData, {
@@ -384,6 +396,17 @@ export const VideoTrimMergeTab: React.FC<Props> = ({ outputFolder }) => {
       return;
     }
 
+    let targetDirectory = outputFolder;
+    if (!targetDirectory) {
+      message.info('Vui lòng chọn thư mục lưu trữ trên máy tính của bạn trước khi ghép video.');
+      const picked = await openNativeFolderDialog();
+      if (!picked) {
+        message.warning('Bạn chưa chọn thư mục lưu trữ để ghép video.');
+        return;
+      }
+      targetDirectory = picked;
+    }
+
     setMergeIsProcessing(true);
     message.loading({ content: `Đang chuẩn hóa và ghép nối ${mergeClips.length} video...`, key: 'merge_msg', duration: 0 });
 
@@ -397,7 +420,7 @@ export const VideoTrimMergeTab: React.FC<Props> = ({ outputFolder }) => {
     if (bgMusicFile) {
       formData.append('bgMusic', bgMusicFile);
     }
-    formData.append('outputFolder', outputFolder);
+    formData.append('outputFolder', targetDirectory);
 
     try {
       const res = await axios.post('/api/video/merge', formData, {
@@ -419,6 +442,10 @@ export const VideoTrimMergeTab: React.FC<Props> = ({ outputFolder }) => {
   };
 
   const handleOpenFolder = async () => {
+    if (!outputFolder) {
+      await openNativeFolderDialog();
+      return;
+    }
     try {
       await axios.post('/api/open-folder', { folderPath: outputFolder });
     } catch {
