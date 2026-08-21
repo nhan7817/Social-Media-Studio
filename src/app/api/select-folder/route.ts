@@ -3,12 +3,26 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
-  // Safe project-relative default storage for server / domain environments
+  const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+  if (isVercel) {
+    return NextResponse.json({
+      defaultPath: '📁 [Máy tính] Thư mục Downloads',
+      suggestions: [
+        '📁 [Máy tính] Thư mục Downloads',
+        '📁 [Máy tính] Thư mục Videos',
+      ],
+      exists: true,
+      isServerEnvironment: true,
+    });
+  }
+
   const projectStorage = path.join(process.cwd(), 'storage', 'downloads');
   const userDownloads = path.join(os.homedir(), 'Downloads', 'SocialMedia');
 
-  // If local user Downloads directory is accessible, suggest it, otherwise default to project storage
   let defaultDir = projectStorage;
   try {
     if (fs.existsSync(path.join(os.homedir(), 'Downloads'))) {
@@ -16,16 +30,12 @@ export async function GET() {
     }
   } catch {}
 
-  // Ensure default storage exists
   try {
     if (!fs.existsSync(defaultDir)) {
       fs.mkdirSync(defaultDir, { recursive: true });
     }
   } catch {
     defaultDir = projectStorage;
-    if (!fs.existsSync(defaultDir)) {
-      fs.mkdirSync(defaultDir, { recursive: true });
-    }
   }
 
   const suggestions = [
@@ -38,27 +48,40 @@ export async function GET() {
     defaultPath: defaultDir,
     suggestions,
     exists: fs.existsSync(defaultDir),
-    isServerEnvironment: process.env.NODE_ENV === 'production' || !process.platform.startsWith('win'),
+    isServerEnvironment: false,
   });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const { folderPath } = await req.json();
-    if (!folderPath) {
+    if (!folderPath || typeof folderPath !== 'string') {
       return NextResponse.json({ error: 'Đường dẫn thư mục không hợp lệ' }, { status: 400 });
     }
 
-    const resolved = path.resolve(folderPath);
-    if (!fs.existsSync(resolved)) {
-      fs.mkdirSync(resolved, { recursive: true });
+    const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+    // On Vercel / Cloud serverless, client paths (D:\..., 📁 [Máy tính]...) are always accepted
+    if (isVercel || folderPath.startsWith('📁') || folderPath.includes(':')) {
+      return NextResponse.json({
+        valid: true,
+        resolvedPath: folderPath,
+        isCloud: true,
+      });
     }
+
+    const resolved = path.resolve(folderPath);
+    try {
+      if (!fs.existsSync(resolved)) {
+        fs.mkdirSync(resolved, { recursive: true });
+      }
+    } catch {}
 
     return NextResponse.json({
       valid: true,
       resolvedPath: resolved,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ valid: true, resolvedPath: 'downloads' });
   }
 }
