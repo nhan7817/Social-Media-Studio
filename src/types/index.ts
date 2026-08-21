@@ -26,6 +26,8 @@ export type BlurPosition =
   | 'bottom-left'
   | 'tiktok-bounce';
 
+export type LogoRemovalMethod = 'delogo' | 'blur' | 'pixelate';
+
 export interface BlurZone {
   id: string;
   x: number; // percentage (0 - 100)
@@ -33,6 +35,8 @@ export interface BlurZone {
   width: number; // percentage (0 - 100)
   height: number; // percentage (0 - 100)
   intensity?: number;
+  method?: LogoRemovalMethod;
+  band?: number; // Delogo edge blending band thickness
 }
 
 export interface BlurConfig {
@@ -41,6 +45,7 @@ export interface BlurConfig {
   widthPercent?: number;
   heightPercent?: number;
   blurIntensity?: number;
+  defaultMethod?: LogoRemovalMethod;
   zones?: BlurZone[];
 }
 

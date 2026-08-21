@@ -17,6 +17,7 @@ import { FailedLinksModal } from '@/components/FailedLinksModal';
 import { AudioExtractorTab } from '@/components/modules/AudioExtractorTab';
 import { AspectConverterTab } from '@/components/modules/AspectConverterTab';
 import { VideoEditorTab } from '@/components/modules/VideoEditorTab';
+import { VideoTrimMergeTab } from '@/components/modules/VideoTrimMergeTab';
 import { HistoryManagerTab } from '@/components/modules/HistoryManagerTab';
 import { SettingsTab } from '@/components/modules/SettingsTab';
 import { Layers, ShieldCheck, Zap } from 'lucide-react';
@@ -39,12 +40,53 @@ const DEFAULT_WATERMARK: WatermarkConfig = {
   outputAspectRatio: 'original',
 };
 
+const VALID_MODULES: ActiveModuleKey[] = ['downloader', 'trim-merge', 'editor', 'audio', 'aspect', 'storage', 'settings'];
+
 export default function Home() {
-  const [activeModule, setActiveModule] = useState<ActiveModuleKey>('downloader');
+  const [activeModule, setActiveModuleState] = useState<ActiveModuleKey>('downloader');
   const [rawLinks, setRawLinks] = useState<string>('');
   const [selectedPlatform, setSelectedPlatform] = useState<SupportedPlatform>('auto');
   const [outputFolder, setOutputFolder] = useState<string>('');
   const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK);
+
+  // Sync module change to URL and LocalStorage
+  const setActiveModule = (key: ActiveModuleKey) => {
+    setActiveModuleState(key);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('social_studio_active_tab', key);
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', key);
+        window.history.replaceState({}, '', url.toString());
+      } catch {}
+    }
+  };
+
+  // Restore active module on initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab') as ActiveModuleKey | null;
+        const savedTab = localStorage.getItem('social_studio_active_tab') as ActiveModuleKey | null;
+
+        const targetTab = (tabParam && VALID_MODULES.includes(tabParam))
+          ? tabParam
+          : (savedTab && VALID_MODULES.includes(savedTab))
+            ? savedTab
+            : 'downloader';
+
+        setActiveModuleState(targetTab);
+
+        // Keep URL in sync
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('tab') !== targetTab) {
+          url.searchParams.set('tab', targetTab);
+          window.history.replaceState({}, '', url.toString());
+        }
+      } catch {}
+    }
+  }, []);
 
   // Job Progress State
   const [jobId, setJobId] = useState<string | null>(null);
@@ -335,7 +377,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* Module 2: Video Editor & Logo Blur Studio */}
+      {/* Module 2: Video Trim & Merge Studio */}
+      {activeModule === 'trim-merge' && (
+        <VideoTrimMergeTab outputFolder={outputFolder} />
+      )}
+
+      {/* Module 3: Video Editor & Logo Blur Studio */}
       {activeModule === 'editor' && (
         <VideoEditorTab outputFolder={outputFolder} />
       )}

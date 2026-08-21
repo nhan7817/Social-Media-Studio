@@ -492,8 +492,8 @@ export const VideoEditorTab: React.FC<Props> = ({ outputFolder }) => {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {blurZones.map((z, i) => (
-                        <Tag key={z.id} color="gold" className="font-mono text-slate-950 font-semibold text-[10px] py-0.5">
-                          #{i + 1}: {Math.round(z.width)}x{Math.round(z.height)}% (X:{Math.round(z.x)}%, Y:{Math.round(z.y)}%)
+                        <Tag key={z.id} color={z.method === 'pixelate' ? 'cyan' : z.method === 'blur' ? 'blue' : 'gold'} className="font-mono font-semibold text-[10px] py-0.5">
+                          #{i + 1} [{(z.method || 'delogo').toUpperCase()}]: {Math.round(z.width)}x{Math.round(z.height)}% (X:{Math.round(z.x)}%, Y:{Math.round(z.y)}%)
                         </Tag>
                       ))}
                     </div>

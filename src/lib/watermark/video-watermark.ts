@@ -229,6 +229,7 @@ export async function applyWatermarkToVideo(
     let currentV = '[0:v]';
 
     // 1. Process visual blur zones sequentially with crop + boxblur + overlay
+    // 1. Process visual watermark removal / blur zones
     if (hasBlur) {
       blurZones.forEach((zone, idx) => {
         const x = Math.max(0, Math.min(0.95, (zone.x || 0) / 100));
@@ -236,15 +237,33 @@ export async function applyWatermarkToVideo(
         const w = Math.max(0.02, Math.min(1 - x, (zone.width || 20) / 100));
         const h = Math.max(0.02, Math.min(1 - y, (zone.height || 10) / 100));
         const intensity = Math.min(30, Math.max(4, Math.round(zone.intensity || 16)));
+        const method = zone.method || config.blurConfig?.defaultMethod || 'delogo';
+        const band = Math.min(10, Math.max(1, zone.band || 2));
 
         const isLastStep = (idx === blurZones.length - 1) && !targetDim && !hasWatermark;
-        const outLabel = isLastStep ? '[outv]' : `[v_blur_${idx}]`;
+        const outLabel = isLastStep ? '[outv]' : `[v_rm_${idx}]`;
 
-        filterParts.push(
-          `${currentV}split[base_${idx}][crop_in_${idx}]`,
-          `[crop_in_${idx}]crop=iw*${w.toFixed(4)}:ih*${h.toFixed(4)}:iw*${x.toFixed(4)}:ih*${y.toFixed(4)},boxblur=${intensity}:1[blurred_${idx}]`,
-          `[base_${idx}][blurred_${idx}]overlay=main_w*${x.toFixed(4)}:main_h*${y.toFixed(4)}${outLabel}`
-        );
+        if (method === 'delogo') {
+          // FFmpeg Delogo interpolation filter
+          filterParts.push(
+            `${currentV}delogo=x=iw*${x.toFixed(4)}:y=ih*${y.toFixed(4)}:w=iw*${w.toFixed(4)}:h=ih*${h.toFixed(4)}:band=${band}${outLabel}`
+          );
+        } else if (method === 'pixelate') {
+          // Mosaic / Pixelate effect (scale down with neighbor sampling and scale back)
+          const factor = Math.max(4, Math.min(24, Math.round(intensity / 2)));
+          filterParts.push(
+            `${currentV}split[base_${idx}][crop_in_${idx}]`,
+            `[crop_in_${idx}]crop=iw*${w.toFixed(4)}:ih*${h.toFixed(4)}:iw*${x.toFixed(4)}:ih*${y.toFixed(4)},scale=iw/${factor}:ih/${factor},scale=iw*${factor}:ih*${factor}:flags=neighbor[pix_${idx}]`,
+            `[base_${idx}][pix_${idx}]overlay=main_w*${x.toFixed(4)}:main_h*${y.toFixed(4)}${outLabel}`
+          );
+        } else {
+          // Gaussian / Box blur filter
+          filterParts.push(
+            `${currentV}split[base_${idx}][crop_in_${idx}]`,
+            `[crop_in_${idx}]crop=iw*${w.toFixed(4)}:ih*${h.toFixed(4)}:iw*${x.toFixed(4)}:ih*${y.toFixed(4)},boxblur=${intensity}:1[blurred_${idx}]`,
+            `[base_${idx}][blurred_${idx}]overlay=main_w*${x.toFixed(4)}:main_h*${y.toFixed(4)}${outLabel}`
+          );
+        }
 
         currentV = outLabel;
       });

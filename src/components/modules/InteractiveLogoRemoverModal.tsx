@@ -9,6 +9,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  Radio,
   message,
 } from 'antd';
 import {
@@ -26,8 +27,8 @@ import {
   LeftOutlined,
   BorderOutlined,
 } from '@ant-design/icons';
-import { Eraser, Scissors, ZoomIn, Sparkles, Layers } from 'lucide-react';
-import { BlurZone } from '@/types';
+import { Eraser, Scissors, ZoomIn, Sparkles, Layers, Wand2, Grid } from 'lucide-react';
+import { BlurZone, LogoRemovalMethod } from '@/types';
 
 const { Text } = Typography;
 
@@ -93,6 +94,8 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
           width: 24,
           height: 12,
           intensity: 16,
+          method: 'delogo',
+          band: 2,
         };
         setZones([defaultZone]);
         setActiveZoneId(defaultZone.id);
@@ -283,6 +286,8 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
       width: 30,
       height: 15,
       intensity: 16,
+      method: 'delogo',
+      band: 2,
     };
     setZones((prev) => [...prev, newZone]);
     setActiveZoneId(newZone.id);
@@ -370,19 +375,19 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
               {/* Tool Selector Card (matching screenshot) */}
               <div
                 onClick={handleAddNewZone}
-                className="bg-[#121927] hover:bg-[#182236] border border-yellow-500/30 hover:border-yellow-400/80 rounded-2xl p-5 cursor-pointer transition-all flex flex-col items-center text-center group shadow-md"
+                className="bg-[#121927] hover:bg-[#182236] border border-yellow-500/30 hover:border-yellow-400/80 rounded-2xl p-4 cursor-pointer transition-all flex flex-col items-center text-center group shadow-md"
               >
-                <div className="w-14 h-14 rounded-2xl bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                   <div className="relative">
-                    <BorderOutlined className="text-2xl text-yellow-400 font-bold" />
+                    <BorderOutlined className="text-xl text-yellow-400 font-bold" />
                     <PlusOutlined className="text-xs text-yellow-300 absolute inset-0 m-auto" />
                   </div>
                 </div>
-                <h4 className="text-xs font-bold text-slate-200 mb-1">
-                  Chọn vùng cần loại bỏ
+                <h4 className="text-xs font-bold text-slate-200 mb-0.5">
+                  Thêm vùng cần loại bỏ
                 </h4>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Bấm để thêm hoặc dùng chuột kéo vẽ một/nhiều vùng bạn muốn xóa khỏi video.
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Bấm để thêm hoặc dùng chuột kéo vẽ trực tiếp trên khung video.
                 </p>
               </div>
 
@@ -407,7 +412,7 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
 
               {/* Zones List */}
               <div className="pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Layers className="w-3.5 h-3.5 text-pink-400" />
                     <span className="text-xs font-semibold text-slate-200">
@@ -424,14 +429,15 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
                   )}
                 </div>
 
-                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
                   {zones.map((zone, idx) => {
                     const isSelected = zone.id === activeZoneId;
+                    const method = zone.method || 'delogo';
                     return (
                       <div
                         key={zone.id}
                         onClick={() => setActiveZoneId(zone.id)}
-                        className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                        className={`p-2 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
                           isSelected
                             ? 'bg-yellow-400/10 border-yellow-400 text-yellow-300'
                             : 'bg-slate-900/60 border-slate-800/80 text-slate-400 hover:border-slate-700'
@@ -442,9 +448,17 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
                             {idx + 1}
                           </span>
                           <div>
-                            <span className="text-xs font-semibold block">Vùng Xóa #{idx + 1}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold">Vùng #{idx + 1}</span>
+                              <Tag
+                                color={method === 'delogo' ? 'gold' : method === 'pixelate' ? 'cyan' : 'blue'}
+                                className="!text-[9px] !m-0 !px-1 !py-0 leading-none uppercase font-bold"
+                              >
+                                {method === 'delogo' ? 'Delogo' : method === 'pixelate' ? 'Mosaic' : 'Blur'}
+                              </Tag>
+                            </div>
                             <span className="text-[10px] text-slate-500 font-mono">
-                              X: {Math.round(zone.x)}% | Y: {Math.round(zone.y)}% | {Math.round(zone.width)}x{Math.round(zone.height)}%
+                              {Math.round(zone.x)}%,{Math.round(zone.y)}% | {Math.round(zone.width)}x{Math.round(zone.height)}%
                             </span>
                           </div>
                         </div>
@@ -460,11 +474,11 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
                   })}
 
                   {zones.length === 0 && (
-                    <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl bg-slate-950/40">
+                    <div className="text-center py-5 border border-dashed border-slate-800 rounded-xl bg-slate-950/40">
                       <p className="text-xs text-slate-500">Chưa có vùng xóa nào.</p>
                       <button
                         onClick={handleAddNewZone}
-                        className="mt-2 text-xs text-pink-400 font-semibold hover:underline"
+                        className="mt-1 text-xs text-pink-400 font-semibold hover:underline"
                       >
                         + Thêm vùng ngay
                       </button>
@@ -475,32 +489,113 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
 
               {/* Active Zone Settings */}
               {activeZone && (
-                <div className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
+                <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-200">
-                      Tùy chỉnh vùng đang chọn
+                      Cài Đặt Vùng #{zones.findIndex((z) => z.id === activeZone.id) + 1}
                     </span>
                     <Tag color="gold" className="!text-[10px] m-0 font-mono font-bold">
                       {Math.round(activeZone.width)}% x {Math.round(activeZone.height)}%
                     </Tag>
                   </div>
 
+                  {/* Removal Method Choice */}
                   <div>
-                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
-                      <span>Độ mờ (Blur Intensity)</span>
-                      <span className="text-yellow-400 font-mono font-bold">{activeZone.intensity || 16}px</span>
-                    </div>
-                    <Slider
-                      min={5}
-                      max={40}
-                      value={activeZone.intensity || 16}
-                      onChange={(val) => {
-                        setZones((prev) =>
-                          prev.map((z) => (z.id === activeZone.id ? { ...z, intensity: val } : z))
+                    <label className="text-[11px] font-semibold text-slate-300 block mb-1.5">
+                      Phương pháp xóa:
+                    </label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { id: 'delogo' as LogoRemovalMethod, label: 'Delogo', desc: 'Nội suy' },
+                        { id: 'blur' as LogoRemovalMethod, label: 'Làm Mờ', desc: 'Gaussian' },
+                        { id: 'pixelate' as LogoRemovalMethod, label: 'Mosaic', desc: 'Điểm ảnh' },
+                      ].map((m) => {
+                        const isChosen = (activeZone.method || 'delogo') === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setZones((prev) =>
+                                prev.map((z) =>
+                                  z.id === activeZone.id ? { ...z, method: m.id } : z
+                                )
+                              );
+                            }}
+                            className={`py-1.5 px-2 rounded-xl text-center border transition-all ${
+                              isChosen
+                                ? 'bg-yellow-400 text-slate-950 font-bold border-yellow-400 shadow-md'
+                                : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="text-[11px] leading-tight">{m.label}</div>
+                            <div className={`text-[9px] ${isChosen ? 'text-slate-800' : 'text-slate-500'}`}>{m.desc}</div>
+                          </button>
                         );
-                      }}
-                    />
+                      })}
+                    </div>
                   </div>
+
+                  {/* Parameters based on chosen method */}
+                  {(activeZone.method || 'delogo') === 'delogo' && (
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                        <span>Độ hòa viền (Edge Band)</span>
+                        <span className="text-yellow-400 font-mono font-bold">{activeZone.band || 2}px</span>
+                      </div>
+                      <Slider
+                        min={1}
+                        max={8}
+                        value={activeZone.band || 2}
+                        onChange={(val) => {
+                          setZones((prev) =>
+                            prev.map((z) => (z.id === activeZone.id ? { ...z, band: val } : z))
+                          );
+                        }}
+                      />
+                      <p className="text-[10px] text-slate-500 italic mt-0.5">
+                        Tự động tái tạo và pha trộn pixel xung quanh viền để xóa logo.
+                      </p>
+                    </div>
+                  )}
+
+                  {(activeZone.method || 'delogo') === 'blur' && (
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                        <span>Độ mờ (Blur Radius)</span>
+                        <span className="text-yellow-400 font-mono font-bold">{activeZone.intensity || 16}px</span>
+                      </div>
+                      <Slider
+                        min={5}
+                        max={40}
+                        value={activeZone.intensity || 16}
+                        onChange={(val) => {
+                          setZones((prev) =>
+                            prev.map((z) => (z.id === activeZone.id ? { ...z, intensity: val } : z))
+                          );
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {(activeZone.method || 'delogo') === 'pixelate' && (
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                        <span>Kích thước ô (Pixel Size)</span>
+                        <span className="text-yellow-400 font-mono font-bold">{activeZone.intensity || 16}px</span>
+                      </div>
+                      <Slider
+                        min={6}
+                        max={36}
+                        value={activeZone.intensity || 16}
+                        onChange={(val) => {
+                          setZones((prev) =>
+                            prev.map((z) => (z.id === activeZone.id ? { ...z, intensity: val } : z))
+                          );
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -541,6 +636,7 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
                 {/* Render All Existing Zones */}
                 {zones.map((zone, idx) => {
                   const isSelected = zone.id === activeZoneId;
+                  const method = zone.method || 'delogo';
                   return (
                     <div
                       key={zone.id}
@@ -557,18 +653,30 @@ export const InteractiveLogoRemoverModal: React.FC<Props> = ({
                           : 'border-2 border-dashed border-yellow-500/70 bg-black/20 hover:border-yellow-400 z-10'
                       }`}
                     >
-                      {/* Real-time Backdrop Blur inside the box */}
-                      <div
-                        className="w-full h-full rounded pointer-events-none"
-                        style={{
-                          backdropFilter: `blur(${zone.intensity || 16}px)`,
-                          WebkitBackdropFilter: `blur(${zone.intensity || 16}px)`,
-                        }}
-                      />
+                      {/* Real-time Visual representation inside the box */}
+                      {method === 'pixelate' ? (
+                        <div
+                          className="w-full h-full rounded pointer-events-none opacity-80"
+                          style={{
+                            backgroundImage: 'radial-gradient(rgba(255,255,255,0.25) 2px, transparent 0)',
+                            backgroundSize: '8px 8px',
+                            backdropFilter: 'blur(2px)',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full rounded pointer-events-none"
+                          style={{
+                            backdropFilter: `blur(${method === 'delogo' ? 8 : zone.intensity || 16}px)`,
+                            WebkitBackdropFilter: `blur(${method === 'delogo' ? 8 : zone.intensity || 16}px)`,
+                          }}
+                        />
+                      )}
 
-                      {/* Badge / Index label */}
+                      {/* Badge / Index label with Method */}
                       <div className="absolute top-1 left-1 bg-yellow-400 text-slate-950 font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow flex items-center gap-1 pointer-events-none">
                         <span>#{idx + 1}</span>
+                        <span className="text-[9px] uppercase font-normal opacity-80">({method})</span>
                       </div>
 
                       {/* Delete Quick Button on Active Box */}

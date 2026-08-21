@@ -31,7 +31,7 @@ import { Layers, ShieldCheck, Zap } from 'lucide-react';
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
-export type ActiveModuleKey = 'downloader' | 'editor' | 'audio' | 'aspect' | 'storage' | 'settings';
+export type ActiveModuleKey = 'downloader' | 'trim-merge' | 'editor' | 'audio' | 'aspect' | 'storage' | 'settings';
 
 interface AntdAppLayoutProps {
   activeKey: ActiveModuleKey;
@@ -53,6 +53,55 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
   children,
 }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(260);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+
+  // Restore saved sidebar width
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('social_studio_sidebar_width');
+        if (saved) {
+          const parsed = parseInt(saved, 10);
+          if (parsed >= 180 && parsed <= 500) {
+            setSidebarWidth(parsed);
+          }
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Handle Dragging Resize
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (collapsed) return;
+    e.preventDefault();
+    setIsResizing(true);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(180, Math.min(500, moveEvent.clientX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      setIsResizing(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      try {
+        const finalWidth = Math.max(180, Math.min(500, upEvent.clientX));
+        localStorage.setItem('social_studio_sidebar_width', String(finalWidth));
+      } catch {}
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleResetWidth = () => {
+    setSidebarWidth(260);
+    try {
+      localStorage.setItem('social_studio_sidebar_width', '260');
+    } catch {}
+  };
 
   const menuItems = [
     {
@@ -65,8 +114,13 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
       label: 'Tải & Đóng Watermark',
     },
     {
-      key: 'editor',
+      key: 'trim-merge',
       icon: <ScissorOutlined style={{ fontSize: 17 }} />,
+      label: 'Cắt & Ghép Nối Video',
+    },
+    {
+      key: 'editor',
+      icon: <EditOutlined style={{ fontSize: 17 }} />,
       label: 'Chỉnh Sửa & Xóa Logo Video',
     },
     {
@@ -96,16 +150,18 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
   ];
 
   return (
-    <Layout hasSider className="min-h-screen bg-[#070b14] text-slate-100">
+    <Layout hasSider className={`min-h-screen bg-[#070b14] text-slate-100 ${isResizing ? 'select-none' : ''}`}>
       {/* Ant Design Modern Sidebar */}
       <Sider
         trigger={null}
         collapsible
         collapsed={collapsed}
-        width={260}
+        width={sidebarWidth}
         collapsedWidth={80}
         theme="dark"
-        className="!bg-[#0c1222]/95 !border-r !border-slate-800/80 backdrop-blur-xl"
+        className={`!bg-[#0c1222]/95 !border-r !border-slate-800/80 backdrop-blur-xl relative ${
+          isResizing ? '!transition-none' : 'transition-all duration-200'
+        }`}
         style={{
           height: '100vh',
           position: 'sticky',
@@ -115,7 +171,23 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
           zIndex: 100,
         }}
       >
-        <div className="flex flex-col h-full justify-between">
+        {/* Drag-to-Resize Right Handle */}
+        {!collapsed && (
+          <div
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleResetWidth}
+            title="Kéo sang trái/phải để chỉnh độ rộng Menu (Nhấp đúp để đặt lại mặc định)"
+            className={`absolute top-0 right-0 w-2 h-full cursor-col-resize z-50 group flex items-center justify-center transition-colors ${
+              isResizing ? 'bg-indigo-500/80 shadow-lg shadow-indigo-500/50' : 'hover:bg-indigo-500/40'
+            }`}
+          >
+            <div className={`w-0.5 h-10 rounded-full transition-opacity ${
+              isResizing ? 'bg-white opacity-100' : 'bg-slate-500 opacity-0 group-hover:opacity-100'
+            }`} />
+          </div>
+        )}
+
+        <div className="flex flex-col h-full justify-between overflow-hidden">
           <div>
             {/* Brand Logo Header */}
             <div className="h-16 flex items-center px-4 gap-3 border-b border-slate-800/80 overflow-hidden shrink-0">
@@ -188,6 +260,7 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
               <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500"></span>
               <h2 className="text-sm font-semibold text-slate-200">
                 {activeKey === 'downloader' && 'Tải Video & Đóng Dấu Bản Quyền Tự Động'}
+                {activeKey === 'trim-merge' && 'Studio Cắt & Ghép Nối Video Chuyên Nghiệp'}
                 {activeKey === 'editor' && 'Studio Chỉnh Sửa & Xóa / Làm Mờ Logo Video Trực Tiếp'}
                 {activeKey === 'audio' && 'Trích Xuất Âm Thanh MP3 / M4A Chất Lượng Cao'}
                 {activeKey === 'aspect' && 'Bộ Chuyển Đổi Tỉ Lệ Khung Hình Video (9:16, 16:9, 1:1)'}
