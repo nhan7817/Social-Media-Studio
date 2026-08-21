@@ -126,7 +126,7 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
     {
       key: 'audio',
       icon: <AudioOutlined style={{ fontSize: 17 }} />,
-      label: 'Trích xuất Âm thanh MP3',
+      label: 'Trích xuất Âm thanh & Text',
     },
     {
       key: 'aspect',
@@ -262,7 +262,7 @@ export const AntdAppLayout: React.FC<AntdAppLayoutProps> = ({
                 {activeKey === 'downloader' && 'Tải Video & Đóng Dấu Bản Quyền Tự Động'}
                 {activeKey === 'trim-merge' && 'Studio Cắt & Ghép Nối Video Chuyên Nghiệp'}
                 {activeKey === 'editor' && 'Studio Chỉnh Sửa & Xóa / Làm Mờ Logo Video Trực Tiếp'}
-                {activeKey === 'audio' && 'Trích Xuất Âm Thanh MP3 / M4A Chất Lượng Cao'}
+                {activeKey === 'audio' && 'Trích Xuất Âm Thanh MP3 & Nội Dung Text / Lời Thoại Video'}
                 {activeKey === 'aspect' && 'Bộ Chuyển Đổi Tỉ Lệ Khung Hình Video (9:16, 16:9, 1:1)'}
                 {activeKey === 'storage' && 'Quản Lý Tệp Tải Về & Lịch Sử Tác Vụ'}
                 {activeKey === 'settings' && 'Cài Đặt Hệ Thống & Kiểm Tra Engine'}

@@ -3,9 +3,21 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
     const { folderPath } = await req.json();
+
+    // Check if running on Vercel / Cloud serverless container (no local GUI)
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      return NextResponse.json({
+        success: true,
+        isCloud: true,
+        message: 'Đang chạy trên môi trường Web Cloud (Vercel). Các tệp tin được tải trực tiếp về thư mục Downloads của bạn qua trình duyệt.',
+      });
+    }
+
     if (!folderPath) {
       return NextResponse.json({ error: 'Đường dẫn thư mục không được để trống' }, { status: 400 });
     }
@@ -30,11 +42,19 @@ export async function POST(req: NextRequest) {
       });
       child.unref();
     } else {
-      const child = spawn('xdg-open', [resolved], {
-        detached: true,
-        stdio: 'ignore',
-      });
-      child.unref();
+      try {
+        const child = spawn('xdg-open', [resolved], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+      } catch {
+        return NextResponse.json({
+          success: true,
+          isCloud: true,
+          message: 'Môi trường máy chủ không có giao diện đồ họa.',
+        });
+      }
     }
 
     return NextResponse.json({ success: true, path: resolved });
