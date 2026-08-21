@@ -116,16 +116,8 @@ export default function Home() {
   const [isDone, setIsDone] = useState<boolean>(false);
   const [isFailedModalOpen, setIsFailedModalOpen] = useState<boolean>(false);
 
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  // Clean up SSE on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
+  const isCancelledRef = useRef<boolean>(false);
+  const cancelledTaskIdsRef = useRef<Set<string>>(new Set());
 
   const handleStartDownload = async () => {
     const urls = rawLinks
@@ -148,6 +140,8 @@ export default function Home() {
       setOutputFolder(picked);
     }
 
+    isCancelledRef.current = false;
+    cancelledTaskIdsRef.current = new Set();
     setIsProcessing(true);
     setIsDone(false);
     setFailedLinks([]);
@@ -161,96 +155,91 @@ export default function Home() {
       detectedPlatform: selectedPlatform,
       status: 'pending',
       progress: 0,
+      statusMessage: 'Chờ chạy',
     }));
     setTasks(initialTasks);
 
-    try {
-      const res = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tasks: initialTasks.map((t) => ({ id: t.id, url: t.url, platform: t.platform })),
-          outputDirectory: targetDirectory,
-          watermark: watermarkConfig,
-        }),
+    const failedArr: FailedLinkRecord[] = [];
+
+    // Process tasks sequentially (Works 100% on both Vercel Serverless and Localhost)
+    for (let i = 0; i < initialTasks.length; i++) {
+      if (isCancelledRef.current) {
+        break;
+      }
+
+      setCurrentTaskIndex(i);
+      const currentTask = initialTasks[i];
+
+      if (cancelledTaskIdsRef.current.has(currentTask.id)) {
+        setTasks((prev) => {
+          const next = [...prev];
+          next[i] = { ...next[i], status: 'cancelled', statusMessage: 'Đã hủy' };
+          return next;
+        });
+        continue;
+      }
+
+      // Update status to downloading
+      setTasks((prev) => {
+        const next = [...prev];
+        next[i] = {
+          ...next[i],
+          status: 'downloading',
+          statusMessage: 'Đang kết nối & tải video...',
+          progress: 30,
+          startedAt: Date.now(),
+        };
+        return next;
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.jobId) {
-        throw new Error(data.error || 'Lỗi khởi chạy tiến trình.');
-      }
-
-      setJobId(data.jobId);
-      listenToProgress(data.jobId);
-    } catch (err: any) {
-      alert(`Không thể bắt đầu: ${err.message}`);
-      setIsProcessing(false);
-    }
-  };
-
-  const listenToProgress = (currentJobId: string) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const es = new EventSource(`/api/download/progress?jobId=${currentJobId}`);
-    eventSourceRef.current = es;
-
-    es.onmessage = (event) => {
       try {
-        const data: ProgressEventPayload = JSON.parse(event.data);
-
-        setTasks((prevTasks) => {
-          const index = prevTasks.findIndex((t) => t.id === data.task.id);
-          if (index !== -1) {
-            const next = [...prevTasks];
-            next[index] = data.task;
-            return next;
-          }
-          return prevTasks;
+        const res = await axios.post('/api/download/process-item', {
+          task: currentTask,
+          outputDirectory: targetDirectory,
+          watermark: watermarkConfig,
         });
 
-        setCurrentTaskIndex(data.currentTaskIndex);
-        setOverallProgress(data.overallProgress);
-        setFailedLinks(data.failedLinks || []);
-
-        if (data.isDone) {
-          setIsDone(true);
-          setIsProcessing(false);
-          es.close();
+        if (res.data?.success && res.data?.task) {
+          const finishedTask = res.data.task;
+          setTasks((prev) => {
+            const next = [...prev];
+            next[i] = finishedTask;
+            return next;
+          });
+        } else {
+          throw new Error(res.data?.error || 'Lỗi không xác định.');
         }
-      } catch (e) {
-        console.error('Error parsing SSE progress event:', e);
+      } catch (err: any) {
+        const errorMsg = err.response?.data?.error || err.message || 'Lỗi xử lý video';
+        setTasks((prev) => {
+          const next = [...prev];
+          next[i] = {
+            ...next[i],
+            status: 'failed',
+            statusMessage: errorMsg,
+            error: errorMsg,
+          };
+          return next;
+        });
+
+        const record: FailedLinkRecord = {
+          id: currentTask.id,
+          url: currentTask.url,
+          platform: currentTask.platform,
+          error: errorMsg,
+          failedAt: new Date().toLocaleTimeString(),
+        };
+        failedArr.push(record);
+        setFailedLinks([...failedArr]);
       }
-    };
 
-    es.onerror = () => {
-      es.close();
-      pollProgress(currentJobId);
-    };
-  };
-
-  const pollProgress = async (currentJobId: string) => {
-    try {
-      const res = await fetch(`/api/download/progress?jobId=${currentJobId}&mode=poll`);
-      const data = await res.json();
-
-      if (data.tasks) {
-        setTasks(data.tasks);
-        setCurrentTaskIndex(data.currentTaskIndex);
-        setOverallProgress(data.overallProgress);
-        setFailedLinks(data.failedLinks || []);
-      }
-
-      if (data.isDone) {
-        setIsDone(true);
-        setIsProcessing(false);
-      } else {
-        setTimeout(() => pollProgress(currentJobId), 1500);
-      }
-    } catch {
-      setIsProcessing(false);
+      const completedCount = i + 1;
+      setOverallProgress(Math.round((completedCount / initialTasks.length) * 100));
     }
+
+    setIsProcessing(false);
+    setIsDone(true);
+    message.success('Đã xử lý xong danh sách video!');
   };
 
   const handleRetryFailed = (failedUrls: string[]) => {
@@ -260,44 +249,27 @@ export default function Home() {
     }, 100);
   };
 
-  const handleCancelAll = async () => {
-    if (!jobId) return;
-    try {
-      await fetch('/api/download/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, action: 'cancel_all' }),
-      });
-      setIsProcessing(false);
-      setIsDone(true);
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.status === 'pending' || t.status === 'downloading' || t.status === 'watermarking'
-            ? { ...t, status: 'cancelled', statusMessage: 'Đã dừng' }
-            : t
-        )
-      );
-    } catch (err: any) {
-      console.error('Cancel all error:', err);
-    }
+  const handleCancelAll = () => {
+    isCancelledRef.current = true;
+    setIsProcessing(false);
+    setIsDone(true);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.status === 'pending' || t.status === 'downloading' || t.status === 'watermarking'
+          ? { ...t, status: 'cancelled', statusMessage: 'Đã dừng' }
+          : t
+      )
+    );
+    message.info('Đã dừng tiến trình tải.');
   };
 
-  const handleCancelTask = async (taskId: string) => {
-    if (!jobId) return;
-    try {
-      await fetch('/api/download/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, action: 'cancel_task', taskId }),
-      });
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId ? { ...t, status: 'cancelled', statusMessage: 'Đã dừng' } : t
-        )
-      );
-    } catch (err: any) {
-      console.error('Cancel task error:', err);
-    }
+  const handleCancelTask = (taskId: string) => {
+    cancelledTaskIdsRef.current.add(taskId);
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: 'cancelled', statusMessage: 'Đã dừng' } : t
+      )
+    );
   };
 
   const handleOpenFolder = async () => {
